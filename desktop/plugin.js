@@ -135,10 +135,10 @@ function FileThumb({ ctx, file }) {
       alt: file.filename || 'image',
       style: {
         display: 'block',
-        maxWidth: 280,
-        maxHeight: 220,
+        maxWidth: 360,
+        maxHeight: 280,
         marginTop: 6,
-        borderRadius: 6,
+        borderRadius: 8,
         border: '1px solid var(--ui-border)',
       },
     });
@@ -236,6 +236,75 @@ function useHercordSocket(ctx, backendDown, channelId) {
   return socketAlive;
 }
 
+
+function avatarLetter(name) {
+  const s = (name || '?').trim();
+  return s ? s.charAt(0).toUpperCase() : '?';
+}
+
+function AvatarCircle({ label, size }) {
+  const sz = size || 32;
+  return jsx('div', {
+    style: {
+      width: sz,
+      height: sz,
+      borderRadius: '50%',
+      flexShrink: 0,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: Math.max(11, Math.round(sz * 0.4)),
+      fontWeight: 600,
+      background:
+        'color-mix(in srgb, var(--ui-accent, #6c8cff) 22%, var(--ui-bg-secondary, transparent))',
+      color: 'var(--ui-text)',
+      userSelect: 'none',
+    },
+    'aria-hidden': true,
+    children: avatarLetter(label),
+  });
+}
+
+function sameMessageGroup(prev, curr) {
+  if (!prev || !curr) return false;
+  const a = prev.user_id || prev.handle || prev.display_name;
+  const b = curr.user_id || curr.handle || curr.display_name;
+  if (!a || a !== b) return false;
+  const ta = prev.created_at;
+  const tb = curr.created_at;
+  if (ta == null || tb == null) return false;
+  return Math.abs(tb - ta) <= 5 * 60;
+}
+
+function formatMsgTime(ts) {
+  if (!ts) return '';
+  try {
+    return new Date(ts * 1000).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function HercordStyles() {
+  return jsx('style', {
+    children: [
+      '.hercord-channel-row:hover:not(.hercord-channel-active){background:var(--ui-bg-hover)!important;}',
+      '.hercord-msg-row:hover{background:var(--ui-bg-hover);}',
+      '.hercord-focus:focus-visible{outline:2px solid var(--ui-accent);outline-offset:1px;}',
+      '.hercord-composer-input:focus{outline:none;box-shadow:none;}',
+      '.hercord-input:focus{outline:none;}',
+      '.hercord-btn:disabled,.hercord-disabled{opacity:0.5;cursor:not-allowed;}',
+      '.hercord-plus:hover{background:var(--ui-bg-hover)!important;}',
+      '.hercord-attach:hover:not(:disabled){background:var(--chrome-action-hover,var(--ui-bg-hover))!important;color:var(--ui-text)!important;}',
+      '.hercord-send:hover:not(:disabled){filter:brightness(1.08);}',
+      '.hercord-send:disabled{opacity:0.45;cursor:not-allowed;}',
+    ].join(''),
+  });
+}
+
 function backendDownView() {
   return jsx('div', {
     className: 'flex h-full items-center justify-center p-6 text-sm',
@@ -308,28 +377,56 @@ function HercordChannelsPane() {
     return backendDownView();
   }
 
+  const handle = user && (user.handle || 'local');
+  const displayName =
+    (user && (user.display_name || user.handle)) ||
+    (healthQuery.isLoading ? '…' : 'no user');
+
   return jsxs('div', {
     className: 'flex h-full w-full flex-col overflow-hidden',
     style: {
       background: 'var(--ui-bg-secondary, var(--ui-bg))',
       color: 'var(--ui-text)',
+      fontSize: 14,
     },
     children: [
+      jsx(HercordStyles, {}),
       jsxs('div', {
-        className: 'flex items-center justify-between px-3 py-2 text-xs font-medium',
-        style: { color: 'var(--ui-text-tertiary)' },
+        className: 'flex items-center justify-between px-3',
+        style: { paddingTop: 12, paddingBottom: 8 },
         children: [
-          jsx('span', { children: 'Channels' }),
+          jsx('span', {
+            style: {
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'var(--ui-text-tertiary, var(--ui-text-secondary))',
+            },
+            children: 'Channels',
+          }),
           jsx('button', {
             type: 'button',
-            className: 'rounded px-1.5 py-0.5 text-xs',
+            className: 'hercord-plus hercord-focus',
+            title: 'New channel',
+            'aria-label': 'New channel',
             style: {
-              color: 'var(--ui-text)',
-              background: 'var(--ui-bg-hover, transparent)',
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: 16,
+              lineHeight: 1,
+              color: 'var(--ui-text-secondary)',
+              background: 'transparent',
+              padding: 0,
             },
             onClick: () => setCreating((v) => !v),
             children: '+',
-            title: 'New channel',
           }),
         ],
       }),
@@ -338,13 +435,16 @@ function HercordChannelsPane() {
             className: 'flex gap-1 px-2 pb-2',
             children: [
               jsx('input', {
-                className: 'min-w-0 flex-1 rounded border px-2 py-1 text-xs',
+                className: 'hercord-input min-w-0 flex-1',
                 style: {
                   background: 'var(--ui-bg)',
-                  borderColor: 'var(--ui-border)',
+                  border: '1px solid var(--ui-border)',
+                  borderRadius: 6,
+                  padding: '6px 8px',
+                  fontSize: 12,
                   color: 'var(--ui-text)',
                 },
-                placeholder: 'name',
+                placeholder: 'channel-name',
                 value: newName,
                 onChange: (e) => setNewName(e.target.value),
                 onKeyDown: (e) => {
@@ -353,10 +453,15 @@ function HercordChannelsPane() {
               }),
               jsx('button', {
                 type: 'button',
-                className: 'rounded px-2 text-xs',
+                className: 'hercord-focus hercord-btn',
                 style: {
+                  borderRadius: 6,
+                  border: 'none',
+                  padding: '6px 10px',
+                  fontSize: 12,
+                  cursor: 'pointer',
                   background: 'var(--ui-accent, var(--ui-bg-hover))',
-                  color: 'var(--ui-text)',
+                  color: 'var(--ui-accent-fg, var(--ui-text))',
                 },
                 onClick: createChannel,
                 children: 'Add',
@@ -364,42 +469,99 @@ function HercordChannelsPane() {
             ],
           })
         : null,
-      jsx('div', {
-        className: 'flex-1 overflow-y-auto px-1 pb-2',
-        children: channels.map((ch) =>
-          jsx(
-            'button',
-            {
-              type: 'button',
-              className: 'mb-0.5 w-full rounded px-2 py-1.5 text-left text-sm',
-              style: {
-                background:
-                  ch.id === channelId
-                    ? 'var(--ui-bg-hover, var(--ui-border))'
-                    : 'transparent',
-                color: 'var(--ui-text)',
-              },
-              onClick: () => {
-                selectChannel(ch.id);
-                host.navigate('/hercord');
-              },
-              children: '#' + ch.slug,
+      jsxs('div', {
+        className: 'flex-1 overflow-y-auto',
+        style: { padding: '4px 8px 8px' },
+        children: [
+          jsx('div', {
+            style: {
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              color: 'var(--ui-text-tertiary, var(--ui-text-secondary))',
+              padding: '8px 10px 4px',
             },
-            ch.id,
-          ),
-        ),
+            children: 'Text Channels',
+          }),
+          channels.map((ch) => {
+            const active = ch.id === channelId;
+            return jsx(
+              'button',
+              {
+                type: 'button',
+                className:
+                  'hercord-channel-row hercord-focus' +
+                  (active ? ' hercord-channel-active' : ''),
+                style: {
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  border: 'none',
+                  borderRadius: 7,
+                  padding: '8px 10px',
+                  marginBottom: 2,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  background: active
+                    ? 'var(--ui-bg-hover, var(--ui-bg-elevated, var(--ui-border)))'
+                    : 'transparent',
+                  color: active
+                    ? 'var(--ui-text)'
+                    : 'var(--ui-text-secondary, var(--ui-text))',
+                  fontWeight: active ? 500 : 400,
+                },
+                onClick: () => {
+                  selectChannel(ch.id);
+                  host.navigate('/hercord');
+                },
+                children: '#' + ch.slug,
+              },
+              ch.id,
+            );
+          }),
+        ],
       }),
-      jsx('div', {
-        className: 'border-t px-3 py-2 text-xs',
+      jsxs('div', {
+        className: 'flex items-center gap-2',
         style: {
-          borderColor: 'var(--ui-border)',
-          color: 'var(--ui-text-tertiary)',
+          padding: '10px 12px',
+          borderTop: '1px solid var(--ui-border)',
+          background: 'var(--ui-bg-secondary, var(--ui-bg))',
         },
-        children: user
-          ? '@' + (user.handle || 'local')
-          : healthQuery.isLoading
-            ? '…'
-            : 'no user',
+        children: [
+          jsx(AvatarCircle, {
+            label: displayName,
+            size: 28,
+          }),
+          jsxs('div', {
+            className: 'min-w-0 flex-1',
+            style: { lineHeight: 1.25 },
+            children: [
+              jsx('div', {
+                style: {
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: 'var(--ui-text)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                },
+                children: displayName,
+              }),
+              jsx('div', {
+                style: {
+                  fontSize: 12,
+                  color: 'var(--ui-text-tertiary, var(--ui-text-secondary))',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                },
+                children: handle ? '@' + handle : '',
+              }),
+            ],
+          }),
+        ],
       }),
     ],
   });
@@ -546,33 +708,75 @@ function HercordChat() {
 
   if (!channelId) {
     return jsx('div', {
-      className: 'flex h-full items-center justify-center p-6 text-sm',
-      style: { color: 'var(--ui-text-secondary)' },
+      className: 'flex h-full items-center justify-center p-6',
+      style: { color: 'var(--ui-text-secondary)', fontSize: 14 },
       children: 'Pick a channel',
     });
   }
+
+  const channelLabel = active ? '#' + active.slug : 'Hercord';
+  const channelTopic =
+    (active && (active.topic || active.description)) || null;
 
   return jsxs('section', {
     className: 'flex h-full min-w-0 w-full flex-col overflow-hidden',
     style: {
       background: 'var(--ui-bg)',
       color: 'var(--ui-text)',
+      fontSize: 14,
     },
     children: [
+      jsx(HercordStyles, {}),
       jsxs('header', {
-        className: 'flex items-center justify-between border-b px-4 py-2',
-        style: { borderColor: 'var(--ui-border)' },
+        className: 'flex items-center justify-between',
+        style: {
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--ui-border)',
+          minHeight: 48,
+          gap: 12,
+        },
         children: [
-          jsx('div', {
-            className: 'text-sm font-medium',
-            children: active ? '#' + active.slug : 'Hercord',
+          jsxs('div', {
+            className: 'min-w-0 flex-1',
+            style: { lineHeight: 1.3 },
+            children: [
+              jsx('div', {
+                style: {
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: 'var(--ui-text)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                },
+                children: channelLabel,
+              }),
+              channelTopic
+                ? jsx('div', {
+                    style: {
+                      fontSize: 12,
+                      color: 'var(--ui-text-tertiary, var(--ui-text-secondary))',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    },
+                    children: channelTopic,
+                  })
+                : null,
+            ],
           }),
           jsx('button', {
             type: 'button',
-            className: 'rounded border px-2 py-1 text-xs opacity-60',
+            className: 'hercord-focus hercord-btn',
             style: {
-              borderColor: 'var(--ui-border)',
-              color: 'var(--ui-text-tertiary)',
+              borderRadius: 6,
+              border: '1px solid var(--ui-border)',
+              background: 'transparent',
+              padding: '5px 10px',
+              fontSize: 12,
+              color: 'var(--ui-text-secondary)',
+              cursor: 'pointer',
+              opacity: 0.55,
             },
             onClick: voiceClick,
             disabled: true,
@@ -583,101 +787,242 @@ function HercordChat() {
       }),
       jsx('div', {
         ref: listRef,
-        className: 'flex-1 overflow-y-auto px-4 py-3',
+        className: 'flex-1 overflow-y-auto',
+        style: { padding: '16px 0' },
         children:
           messages.length === 0
-            ? jsx('div', {
-                className: 'text-sm',
-                style: { color: 'var(--ui-text-tertiary)' },
-                children: 'No messages yet. Say hello.',
+            ? jsxs('div', {
+                className: 'flex h-full flex-col items-center justify-center',
+                style: {
+                  color: 'var(--ui-text-tertiary, var(--ui-text-secondary))',
+                  padding: 24,
+                  textAlign: 'center',
+                  gap: 6,
+                },
+                children: [
+                  jsx('div', {
+                    style: { fontSize: 18, fontWeight: 600, color: 'var(--ui-text)' },
+                    children: 'Welcome to ' + channelLabel,
+                  }),
+                  jsx('div', {
+                    style: { fontSize: 13 },
+                    children: 'No messages yet…',
+                  }),
+                ],
               })
-            : messages.map((m) =>
-                jsxs(
+            : messages.map((m, i) => {
+                const prev = i > 0 ? messages[i - 1] : null;
+                const grouped = sameMessageGroup(prev, m);
+                const author = m.display_name || m.handle || 'user';
+                const time = formatMsgTime(m.created_at);
+                return jsxs(
                   'div',
                   {
-                    className: 'mb-3',
+                    className: 'hercord-msg-row',
+                    style: {
+                      display: 'flex',
+                      gap: 12,
+                      padding: grouped ? '2px 16px 2px 16px' : '8px 16px',
+                      marginTop: grouped ? 0 : 8,
+                    },
                     children: [
+                      jsx('div', {
+                        style: {
+                          width: 36,
+                          flexShrink: 0,
+                          paddingTop: 2,
+                        },
+                        children: grouped
+                          ? null
+                          : jsx(AvatarCircle, { label: author, size: 36 }),
+                      }),
                       jsxs('div', {
-                        className: 'mb-0.5 flex items-baseline gap-2 text-xs',
-                        style: { color: 'var(--ui-text-tertiary)' },
+                        className: 'min-w-0 flex-1',
                         children: [
-                          jsx('span', {
-                            className: 'font-medium',
-                            style: { color: 'var(--ui-text)' },
-                            children: m.display_name || m.handle || 'user',
-                          }),
-                          jsx('span', {
-                            children: m.created_at
-                              ? new Date(m.created_at * 1000).toLocaleTimeString()
-                              : '',
-                          }),
+                          grouped
+                            ? null
+                            : jsxs('div', {
+                                className: 'flex items-baseline gap-2',
+                                style: { marginBottom: 2, lineHeight: 1.3 },
+                                children: [
+                                  jsx('span', {
+                                    style: {
+                                      fontSize: 14,
+                                      fontWeight: 600,
+                                      color: 'var(--ui-text)',
+                                    },
+                                    children: author,
+                                  }),
+                                  jsx('span', {
+                                    style: {
+                                      fontSize: 12,
+                                      color:
+                                        'var(--ui-text-tertiary, var(--ui-text-secondary))',
+                                    },
+                                    children: time,
+                                  }),
+                                ],
+                              }),
+                          m.file
+                            ? null
+                            : jsx('div', {
+                                style: {
+                                  fontSize: 14,
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  lineHeight: 1.4,
+                                  color: 'var(--ui-text)',
+                                },
+                                children: m.body || '',
+                              }),
+                          m.file ? jsx(FileThumb, { ctx, file: m.file }) : null,
                         ],
                       }),
-                      jsx('div', {
-                        className: 'whitespace-pre-wrap break-words text-sm',
-                        children: m.file ? '' : m.body || '',
-                      }),
-                      m.file ? jsx(FileThumb, { ctx, file: m.file }) : null,
                     ],
                   },
                   m.id,
-                ),
-              ),
+                );
+              }),
       }),
-      jsxs('footer', {
-        className: 'border-t p-3',
-        style: { borderColor: 'var(--ui-border)' },
-        children: [
-          jsx('textarea', {
-            className: 'mb-2 w-full resize-none rounded border px-3 py-2 text-sm',
+      jsx('footer', {
+        style: { padding: '12px 16px 16px', flexShrink: 0 },
+        children: jsx('div', {
+          className: 'hercord-composer',
+          'data-slot': 'composer-root',
+          style: {
+            position: 'relative',
+            borderRadius: 16,
+            overflow: 'hidden',
+          },
+          children: jsxs('div', {
+            'data-slot': 'composer-surface',
             style: {
-              minHeight: '64px',
-              background: 'var(--ui-bg)',
-              borderColor: 'var(--ui-border)',
-              color: 'var(--ui-text)',
+              position: 'relative',
+              borderRadius: 'inherit',
+              border:
+                '1px solid color-mix(in srgb, var(--dt-composer-ring, var(--ui-text)) 18%, var(--dt-input, var(--ui-border)))',
+              overflow: 'hidden',
             },
-            placeholder: active ? 'Message #' + active.slug : 'Select a channel',
-            value: draft,
-            disabled: !channelId || !user,
-            onChange: (e) => setDraft(e.target.value),
-            onKeyDown: onKeyDown,
-          }),
-          jsxs('div', {
-            className: 'flex items-center gap-2',
             children: [
-              jsx('input', {
-                ref: fileRef,
-                type: 'file',
-                className: 'hidden',
-                onChange: onAttach,
-              }),
-              jsx('button', {
-                type: 'button',
-                className: 'rounded border px-2 py-1 text-xs',
+              jsx('div', {
+                'aria-hidden': true,
                 style: {
-                  borderColor: 'var(--ui-border)',
-                  color: 'var(--ui-text-secondary, var(--ui-text))',
+                  position: 'absolute',
+                  inset: 0,
+                  background:
+                    'var(--composer-fill, color-mix(in srgb, var(--ui-bg-elevated, var(--ui-bg-secondary)) 90%, transparent))',
+                  backdropFilter: 'blur(0.75rem) saturate(1.12)',
+                  WebkitBackdropFilter: 'blur(0.75rem) saturate(1.12)',
+                  pointerEvents: 'none',
+                  zIndex: 0,
                 },
-                disabled: !channelId || !user,
-                onClick: () => fileRef.current && fileRef.current.click(),
-                children: 'Attach',
               }),
-              jsx('div', { className: 'flex-1' }),
-              jsx('button', {
-                type: 'button',
-                className: 'rounded px-3 py-1.5 text-sm font-medium',
+              jsxs('div', {
                 style: {
-                  background: 'var(--ui-accent, var(--ui-bg-hover))',
-                  color: 'var(--ui-accent-fg, var(--ui-text))',
-                  opacity: !draft.trim() || sending ? 0.5 : 1,
+                  position: 'relative',
+                  zIndex: 1,
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  gap: '0.25rem',
+                  padding: '0.3125rem 0.5rem',
                 },
-                disabled: !draft.trim() || !channelId || !user || sending,
-                onClick: sendMessage,
-                children: sending ? '…' : 'Send',
+                children: [
+                  jsx('input', {
+                    ref: fileRef,
+                    type: 'file',
+                    className: 'hidden',
+                    onChange: onAttach,
+                  }),
+                  jsx('button', {
+                    type: 'button',
+                    className: 'hercord-attach hercord-focus hercord-btn',
+                    title: 'Attach',
+                    'aria-label': 'Attach',
+                    style: {
+                      width: '1.5rem',
+                      height: '1.5rem',
+                      minWidth: '1.5rem',
+                      borderRadius: 6,
+                      border: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontSize: 16,
+                      fontWeight: 500,
+                      lineHeight: 1,
+                      color:
+                        'var(--ui-text-tertiary, var(--ui-text-secondary))',
+                      flexShrink: 0,
+                      marginBottom: 2,
+                    },
+                    disabled: !channelId || !user,
+                    onClick: () => fileRef.current && fileRef.current.click(),
+                    children: '+',
+                  }),
+                  jsx('textarea', {
+                    className: 'hercord-composer-input min-w-0 flex-1',
+                    style: {
+                      resize: 'none',
+                      border: 'none',
+                      outline: 'none',
+                      boxShadow: 'none',
+                      background: 'transparent',
+                      color: 'var(--ui-text)',
+                      fontSize: 14,
+                      lineHeight: 1.4,
+                      minHeight: '1.625rem',
+                      maxHeight: '9.375rem',
+                      padding: '0.25rem 0',
+                      fontFamily: 'inherit',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    },
+                    rows: 1,
+                    placeholder: active
+                      ? 'Message #' + active.slug
+                      : 'Select a channel',
+                    value: draft,
+                    disabled: !channelId || !user,
+                    onChange: (e) => setDraft(e.target.value),
+                    onKeyDown: onKeyDown,
+                  }),
+                  jsx('button', {
+                    type: 'button',
+                    className: 'hercord-send hercord-focus hercord-btn',
+                    title: 'Send (Enter)',
+                    'aria-label': 'Send',
+                    style: {
+                      width: '1.625rem',
+                      height: '1.625rem',
+                      minWidth: '1.625rem',
+                      border: 'none',
+                      borderRadius: 9999,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      lineHeight: 1,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      background: 'var(--ui-text, #111)',
+                      color: 'var(--ui-bg, #fff)',
+                      opacity: !draft.trim() || sending ? 0.45 : 1,
+                      marginBottom: 1,
+                    },
+                    disabled: !draft.trim() || !channelId || !user || sending,
+                    onClick: sendMessage,
+                    children: sending ? '…' : '↑',
+                  }),
+                ],
               }),
             ],
           }),
-        ],
+        }),
       }),
     ],
   });

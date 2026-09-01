@@ -31,8 +31,8 @@ Channels live in the **Hercord** left-zone tab; the main pane is the chat thread
 - `#general` is created on first run
 - Click a channel to open the thread
 - Enter sends, Shift+Enter inserts a newline
-- Attach sits next to the composer
-- Voice is on the channel header
+- Composer is a single rounded bar (📎 attach inside, Send / Enter)
+- Voice is a quiet ghost control on the channel header
 
 ## Data
 
