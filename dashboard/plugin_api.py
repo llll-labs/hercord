@@ -20,7 +20,6 @@ from typing import Any, Optional
 from fastapi import (
     APIRouter,
     File,
-    Form,
     HTTPException,
     Query,
     UploadFile,
@@ -402,6 +401,26 @@ def list_messages(
         ).fetchall()
         # Chronological for the UI
         msgs = [_row_message(r) for r in reversed(rows)]
+        if msgs:
+            ids = [m["id"] for m in msgs]
+            placeholders = ",".join("?" * len(ids))
+            frows = conn.execute(
+                f"SELECT * FROM files WHERE message_id IN ({placeholders})",
+                ids,
+            ).fetchall()
+            by_msg: dict[str, dict] = {}
+            for fr in frows:
+                by_msg[fr["message_id"]] = _row_file(fr)
+            for m in msgs:
+                f = by_msg.get(m["id"])
+                if f:
+                    # Do not leak on-disk path to the client.
+                    m["file"] = {
+                        "id": f["id"],
+                        "filename": f["filename"],
+                        "mime": f["mime"],
+                        "size": f["size"],
+                    }
         return {"messages": msgs}
     finally:
         conn.close()
@@ -460,19 +479,29 @@ async def create_message(channel_id: str, body: CreateMessageBody):
 @router.post("/files")
 async def upload_file(
     file: UploadFile = File(...),
-    uploader_id: str = Form(...),
-    message_id: Optional[str] = Form(None),
-    channel_id: Optional[str] = Form(None),
+    uploader_id: Optional[str] = Query(None),
+    message_id: Optional[str] = Query(None),
+    channel_id: Optional[str] = Query(None),
 ):
     """Multipart upload. Cap UPLOAD_MAX_BYTES → 413.
 
+    Hermes Desktop's plugin REST upload only sends the file part (no extra
+    form fields), so identity/channel ride on the query string.
     Optionally creates a message in ``channel_id`` linking the file.
     """
-    if not uploader_id:
-        raise HTTPException(status_code=400, detail="uploader_id is required")
-
     conn = get_db()
     try:
+        if not uploader_id:
+            urow = conn.execute(
+                "SELECT id FROM users WHERE handle = ? LIMIT 1", ("local",)
+            ).fetchone()
+            if urow is None:
+                urow = conn.execute(
+                    "SELECT id FROM users ORDER BY created_at ASC LIMIT 1"
+                ).fetchone()
+            if urow is None:
+                raise HTTPException(status_code=400, detail="uploader_id is required")
+            uploader_id = urow["id"]
         user = conn.execute(
             "SELECT id FROM users WHERE id = ?", (uploader_id,)
         ).fetchone()
@@ -601,6 +630,40 @@ def download_file(file_id: str):
             filename=row["filename"],
             media_type=row["mime"] or "application/octet-stream",
         )
+    finally:
+        conn.close()
+
+
+@router.get("/files/{file_id}/data")
+def file_data_url(file_id: str):
+    """JSON data-URL for in-plugin image thumbs (plugin REST is JSON-only)."""
+    import base64
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM files WHERE id = ?", (file_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="file not found")
+        stored = Path(row["path"]).resolve()
+        root = _files_dir().resolve()
+        try:
+            stored.relative_to(root)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="file unavailable")
+        if not stored.is_file():
+            raise HTTPException(status_code=404, detail="file missing on disk")
+        if stored.stat().st_size > UPLOAD_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="file too large")
+        raw = stored.read_bytes()
+        mime = row["mime"] or "application/octet-stream"
+        return {
+            "id": row["id"],
+            "filename": row["filename"],
+            "mime": mime,
+            "data_url": f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}",
+        }
     finally:
         conn.close()
 
