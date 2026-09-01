@@ -385,7 +385,7 @@ function HercordChannelsPane() {
   return jsxs('div', {
     className: 'flex h-full w-full flex-col overflow-hidden',
     style: {
-      background: 'var(--ui-bg-secondary, var(--ui-bg))',
+      background: 'var(--ui-bg-sidebar, var(--ui-bg-secondary, var(--ui-bg)))',
       color: 'var(--ui-text)',
       fontSize: 14,
     },
@@ -527,7 +527,7 @@ function HercordChannelsPane() {
         style: {
           padding: '10px 12px',
           borderTop: '1px solid var(--ui-border)',
-          background: 'var(--ui-bg-secondary, var(--ui-bg))',
+          background: 'var(--ui-bg-sidebar, var(--ui-bg-secondary, var(--ui-bg)))',
         },
         children: [
           jsx(AvatarCircle, {
