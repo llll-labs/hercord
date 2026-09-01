@@ -535,40 +535,56 @@ function HercordPage({ ctx }) {
   });
 }
 
+let pluginCtx = null;
+
+function HercordRoute() {
+  return jsx(HercordPage, { ctx: pluginCtx });
+}
+
 export default {
   id: 'hercord',
   name: 'Hercord',
+  description: 'Channels and chat inside Hermes Desktop',
   defaultEnabled: true,
   register(ctx) {
-    const dispose = ctx.registerMany([
+    pluginCtx = ctx;
+    const routesArea = ROUTES_AREA || 'routes';
+    const navArea = SIDEBAR_NAV_AREA || 'sidebar.nav';
+    ctx.registerMany([
       {
         id: 'page',
-        area: ROUTES_AREA,
+        area: routesArea,
+        title: 'Hercord',
         data: { path: '/hercord' },
-        render: () => jsx(HercordPage, { ctx }),
+        render: HercordRoute,
       },
       {
         id: 'nav',
-        area: SIDEBAR_NAV_AREA,
+        area: navArea,
+        order: 55,
         data: {
           path: '/hercord',
           label: 'Hercord',
           codicon: 'comment-discussion',
         },
       },
+      {
+        id: 'open',
+        area: 'palette',
+        data: {
+          id: 'hercord.open',
+          label: 'Hercord: Open',
+          keywords: ['hercord', 'chat', 'channels'],
+          run: () => host.navigate('/hercord'),
+        },
+      },
     ]);
-    if (typeof ctx.onDispose === 'function' && typeof dispose === 'function') {
-      ctx.onDispose(dispose);
-    }
-    // Warm health so the first paint can show the enable hint quickly
     ctx
       .rest('/health')
       .then(() => {
         if (queryClient)
           queryClient.invalidateQueries({ queryKey: QK.health });
       })
-      .catch(() => {
-        /* UI shows enable hint via useQuery error */
-      });
+      .catch(() => {});
   },
 };
