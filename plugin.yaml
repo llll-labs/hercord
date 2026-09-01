@@ -1,0 +1,10 @@
+name: hercord
+label: Hercord
+version: 0.1.0
+description: Mini channels + chat inside Hermes Desktop
+author: hercord
+requires_env: []
+optional_env:
+  - name: LIVEKIT_URL
+  - name: LIVEKIT_API_KEY
+  - name: LIVEKIT_API_SECRET
